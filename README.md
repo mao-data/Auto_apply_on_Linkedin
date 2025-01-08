@@ -20,8 +20,9 @@ pip install beautifulsoup4
 
 ## Setup
 1. Create a `credentials.json` file in the project directory:
-```
+
 json
+```
 {
 "email": "your_linkedin_email@example.com",
 "password": "your_linkedin_password"
