@@ -1,0 +1,20 @@
+2025-01-08 02:47:09,173 - ERROR - Credentials file credentials.json not found
+2025-01-08 03:24:07,556 - ERROR - Invalid JSON format in credentials.json
+2025-01-08 03:24:59,831 - ERROR - Invalid JSON format in credentials.json
+2025-01-08 03:25:38,776 - INFO - Successfully logged in to LinkedIn
+2025-01-08 03:25:52,712 - INFO - Searching jobs with parameters: {'keywords': 'Data Analyst', 'location': 'United States', 'f_E': '1', 'f_JT': 'F', 'f_TPR': 'r604800'}
+2025-01-08 03:25:53,323 - INFO - Browser session closed
+2025-01-08 03:29:37,682 - INFO - Successfully logged in to LinkedIn
+2025-01-08 03:29:40,549 - INFO - Searching jobs with parameters: {'keywords': 'Data Analyst', 'location': 'United States', 'f_E': '1', 'f_JT': 'F', 'f_TPR': 'r604800'}
+2025-01-08 03:29:41,302 - INFO - Browser session closed
+2025-01-08 03:32:38,671 - INFO - Successfully logged in to LinkedIn
+2025-01-08 03:32:43,510 - INFO - Searching jobs with parameters: {'keywords': 'Data Analyst', 'location': 'United States', 'f_E': '1', 'f_JT': 'F', 'f_TPR': 'r604800'}
+2025-01-08 03:33:32,582 - INFO - Browser session closed
+2025-01-08 03:33:54,488 - INFO - Successfully logged in to LinkedIn
+2025-01-08 03:33:58,962 - INFO - Searching jobs with parameters: {'keywords': 'Data Analyst', 'location': 'United States', 'f_E': '1', 'f_JT': 'F', 'f_TPR': 'r604800'}
+2025-01-08 03:34:50,028 - INFO - Browser session closed
+2025-01-08 03:36:39,900 - INFO - Successfully logged in to LinkedIn
+2025-01-08 03:36:44,250 - INFO - Searching jobs with parameters: {'keywords': 'Data Analyst', 'location': 'United States', 'f_E': '1', 'f_JT': 'F', 'f_TPR': 'r604800', 'f_AL': 'true'}
+2025-01-08 03:37:02,338 - INFO - Browser session closed
+2025-01-08 03:41:00,196 - INFO - Successfully logged in to LinkedIn
+2025-01-08 03:44:01,468 - INFO - Successfully logged in to LinkedIn
