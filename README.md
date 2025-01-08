@@ -12,25 +12,28 @@ A Python script that automates the job application process on LinkedIn using Sel
 - Limits maximum applications to prevent overuse
 
 ## Prerequisites
-
+```
 pip install selenium
 pip install webdriver-manager
 pip install beautifulsoup4
+```
 
 ## Setup
 1. Create a `credentials.json` file in the project directory:
+```
 json
 {
 "email": "your_linkedin_email@example.com",
 "password": "your_linkedin_password"
 }
-
+```
 2. Place your resume (PDF format) in the project directory
 3. Update the resume filename in the script 
 
 ## Usage
+```
 python inita.py
-
+```
 ## Configuration Options
 You can modify these parameters in the script:
 - Job keywords (default: "Data Analyst")
@@ -83,12 +86,5 @@ Feel free to fork this repository and submit pull requests for any improvements.
 ## Disclaimer
 This tool is for educational purposes only. Use it responsibly and in accordance with LinkedIn's terms of service. The authors are not responsible for any account restrictions or other consequences of using this tool.
 
-## License
-MIT License
-
 ## Author
 Moris Wu
-
-## Acknowledgments
-- Selenium WebDriver
-- LinkedIn Platform
