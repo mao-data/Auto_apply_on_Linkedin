@@ -41,15 +41,17 @@ You can modify these parameters in the script:
 - Maximum applications (default: 10)
 
 ## Search Filters
+```
 filters = {
 "f_E": "1" # Experience Level (1=Entry, 2=Mid-Senior, 3=Director)
 "f_JT": "F" # Job Type (F=Full-time, P=Part-time, C=Contract)
 "f_AL": "true" # Easy Apply only
 "f_TPR": "r604800" # Time Posted (Past week)
 }
-
+```
 ## Output Example
 ✅ Successfully applied to job #1:
+```
 Title: Data Analyst
 Company: Example Corp
 Location: Remote
@@ -61,7 +63,7 @@ Company: Example Corp
 Location: Remote
 Applied: 2024-03-14 15:30:45
 --------------------------------------------------
-
+```
 ## Safety Features
 - Automatic breaks between applications
 - Error handling for failed applications
