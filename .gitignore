@@ -1,0 +1,29 @@
+# Environment
+.env
+venv/
+env/
+
+# Credentials
+credentials.json
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Resume (user's personal file)
+*.pdf

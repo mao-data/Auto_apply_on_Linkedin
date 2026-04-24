@@ -1,91 +1,138 @@
 # LinkedIn Auto Job Application Bot
 
-A Python script that automates the job application process on LinkedIn using Selenium WebDriver.
+Automated LinkedIn job application tool with **AI-powered resume customization** using Claude API.
 
 ## Features
-- Automatically logs into LinkedIn
-- Searches for jobs based on specified criteria
-- Applies to jobs with "Easy Apply" option
-- Handles resume uploads automatically
-- Tracks and logs successful applications
-- Supports customizable search filters
-- Limits maximum applications to prevent overuse
+
+- **Automated Easy Apply** — Finds and applies to LinkedIn jobs automatically
+- **AI Job Fit Analysis** — Uses Claude to score how well your resume matches each job (skip low-fit jobs)
+- **AI Cover Letter Generation** — Generates personalized cover letters for each application
+- **Smart Resume Tailoring** — Rewrites bullet points to align with job requirements
+- **Multi-page Search** — Automatically paginates through search results
+- **Security Check Handling** — Pauses for manual verification when LinkedIn detects automation
+- **Application Logging** — Saves all successful applications to JSON with timestamps
+- **Configurable Filters** — Job keywords, location, experience level, job type, and more
 
 ## Prerequisites
+
+```bash
+pip install -r requirements.txt
 ```
-pip install selenium
-pip install webdriver-manager
-pip install beautifulsoup4
+
+Optional (for PDF resume reading):
+```bash
+pip install PyPDF2
 ```
 
 ## Setup
-1. Create a `credentials.json` file in the project directory:
 
-json
+1. Copy the environment template and fill in your credentials:
+```bash
+cp .env.example .env
 ```
-{
-"email": "your_linkedin_email@example.com",
-"password": "your_linkedin_password"
-}
+
+2. Edit `.env` with your details:
+```env
+LINKEDIN_EMAIL=your_email@example.com
+LINKEDIN_PASSWORD=your_password
+ANTHROPIC_API_KEY=sk-ant-xxxxx    # Optional, for AI features
+JOB_KEYWORDS=Software Engineer
+JOB_LOCATION=United States
+MAX_APPLICATIONS=10
 ```
-2. Place your resume (PDF format) in the project directory
-3. Update the resume filename in the script 
+
+3. Place your resume (PDF or TXT) in the project directory
 
 ## Usage
-```
+
+### Basic (no AI)
+```bash
 python inita.py
 ```
-## Configuration Options
-You can modify these parameters in the script:
-- Job keywords (default: "Data Analyst")
-- Location (default: "United States")
-- Experience level (default: Entry level)
-- Job type (default: Full-time)
-- Time period (default: Past week)
-- Maximum applications (default: 10)
 
-## Search Filters
+### With AI-powered customization
+```bash
+python inita.py --ai
 ```
-filters = {
-"f_E": "1" # Experience Level (1=Entry, 2=Mid-Senior, 3=Director)
-"f_JT": "F" # Job Type (F=Full-time, P=Part-time, C=Contract)
-"f_AL": "true" # Easy Apply only
-"f_TPR": "r604800" # Time Posted (Past week)
-}
+
+### Override max applications
+```bash
+python inita.py --ai --max 20
 ```
-## Output Example
-✅ Successfully applied to job #1:
+
+## Configuration
+
+All settings are managed via `.env` file:
+
+| Variable | Default | Description |
+|---|---|---|
+| `LINKEDIN_EMAIL` | (required) | Your LinkedIn email |
+| `LINKEDIN_PASSWORD` | (required) | Your LinkedIn password |
+| `ANTHROPIC_API_KEY` | (optional) | Claude API key for AI features |
+| `JOB_KEYWORDS` | Software Engineer | Job search keywords |
+| `JOB_LOCATION` | United States | Job location |
+| `EXPERIENCE_LEVEL` | 1 | 1=Entry, 2=Mid-Senior, 3=Director |
+| `JOB_TYPE` | F | F=Full-time, P=Part-time, C=Contract |
+| `MAX_APPLICATIONS` | 10 | Max applications per run |
+| `RESUME_PATH` | resume.pdf | Path to your resume |
+
+## AI Features (Optional)
+
+When running with `--ai`, the bot will:
+
+1. **Analyze job fit** before applying — scores each job 1-10 and skips poor matches (< 6)
+2. **Generate cover letters** for each successful application (saved to the results JSON)
+3. **Identify skill gaps** — logs which required skills are missing from your resume
+
+Requires an [Anthropic API key](https://console.anthropic.com/).
+
+## Output
+
+Successful applications are saved to `applications_YYYYMMDD_HHMMSS.json`:
+
+```json
+[
+  {
+    "title": "Software Engineer",
+    "company": "Example Corp",
+    "location": "Remote",
+    "timestamp": "2026-04-24 15:30:45",
+    "cover_letter": "Dear Hiring Manager..."
+  }
+]
 ```
-Title: Data Analyst
-Company: Example Corp
-Location: Remote
---------------------------------------------------
-📋 SUMMARY OF SUCCESSFUL APPLICATIONS:
-==================================================
-Data Analyst
-Company: Example Corp
-Location: Remote
-Applied: 2024-03-14 15:30:45
---------------------------------------------------
+
+## Project Structure
+
 ```
+├── inita.py           # Main bot script
+├── config.py          # Configuration management
+├── ai_customizer.py   # AI-powered resume/cover letter tools
+├── .env.example       # Environment template
+├── .gitignore         # Git ignore rules
+├── requirements.txt   # Python dependencies
+└── README.md
+```
+
 ## Safety Features
-- Automatic breaks between applications
-- Error handling for failed applications
-- Clean exit on completion
-- Progress tracking
-- Detailed logging
+
+- Automatic delays between applications to avoid rate limiting
+- Handles LinkedIn security verification prompts
+- Graceful error handling — skips problematic jobs and continues
+- Anti-detection browser flags
+- Keyboard interrupt support (Ctrl+C to stop gracefully)
 
 ## Limitations
-- Only works with "Easy Apply" jobs
-- Requires LinkedIn account
-- May need updates if LinkedIn changes their website structure
-- Limited to 10 applications per run (configurable)
 
-## Contributing
-Feel free to fork this repository and submit pull requests for any improvements.
+- Only works with "Easy Apply" jobs
+- LinkedIn may change their DOM structure — selectors may need updates
+- Some multi-step applications with custom questions may fail
+- AI features require an Anthropic API key and incur API costs
 
 ## Disclaimer
-This tool is for educational purposes only. Use it responsibly and in accordance with LinkedIn's terms of service. The authors are not responsible for any account restrictions or other consequences of using this tool.
+
+This tool is for educational purposes only. Use responsibly and in accordance with LinkedIn's terms of service.
 
 ## Author
+
 Moris Wu
