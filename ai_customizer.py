@@ -1,5 +1,9 @@
+import logging
+
 import anthropic
 from config import Config
+
+logger = logging.getLogger("LinkedInAutoApply")
 
 
 class AICustomizer:
@@ -10,11 +14,13 @@ class AICustomizer:
         if not api_key:
             raise ValueError("ANTHROPIC_API_KEY is required for AI customization. Set it in .env")
         self.client = anthropic.Anthropic(api_key=api_key)
+        self.model = Config.AI_MODEL
 
     def tailor_resume_bullets(self, resume_text: str, job_description: str) -> str:
         """Generate tailored resume bullet points based on the job description."""
+        logger.info("Generating tailored resume bullets...")
         message = self.client.messages.create(
-            model="claude-sonnet-4-6",
+            model=self.model,
             max_tokens=2048,
             messages=[
                 {
@@ -35,8 +41,9 @@ class AICustomizer:
 
     def generate_cover_letter(self, resume_text: str, job_description: str, company_name: str, job_title: str) -> str:
         """Generate a personalized cover letter for a specific job."""
+        logger.info(f"Generating cover letter for {job_title} at {company_name}...")
         message = self.client.messages.create(
-            model="claude-sonnet-4-6",
+            model=self.model,
             max_tokens=1024,
             messages=[
                 {
@@ -57,8 +64,9 @@ class AICustomizer:
 
     def analyze_job_fit(self, resume_text: str, job_description: str) -> dict:
         """Analyze how well the resume fits the job and return a score + suggestions."""
+        logger.info("Analyzing job fit...")
         message = self.client.messages.create(
-            model="claude-sonnet-4-6",
+            model=self.model,
             max_tokens=1024,
             messages=[
                 {
@@ -79,7 +87,9 @@ class AICustomizer:
         )
         import json
 
+        raw = message.content[0].text
         try:
-            return json.loads(message.content[0].text)
+            return json.loads(raw)
         except json.JSONDecodeError:
-            return {"score": 5, "recommendation": "apply", "matching_skills": [], "missing_skills": []}
+            logger.warning(f"Failed to parse AI job fit response as JSON: {raw[:200]}")
+            return {"score": 0, "recommendation": "skip", "matching_skills": [], "missing_skills": ["parse_error"]}

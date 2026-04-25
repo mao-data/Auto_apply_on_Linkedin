@@ -11,13 +11,18 @@ class Config:
 
     # Anthropic API
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+    AI_MODEL = os.getenv("AI_MODEL", "claude-sonnet-4-6")
 
     # Job search settings
     JOB_KEYWORDS = os.getenv("JOB_KEYWORDS", "Software Engineer")
     JOB_LOCATION = os.getenv("JOB_LOCATION", "United States")
     EXPERIENCE_LEVEL = os.getenv("EXPERIENCE_LEVEL", "1")  # 1=Entry, 2=Mid-Senior, 3=Director
     JOB_TYPE = os.getenv("JOB_TYPE", "F")  # F=Full-time, P=Part-time, C=Contract
-    MAX_APPLICATIONS = int(os.getenv("MAX_APPLICATIONS", "10"))
+
+    try:
+        MAX_APPLICATIONS = int(os.getenv("MAX_APPLICATIONS", "10"))
+    except ValueError:
+        MAX_APPLICATIONS = 10
 
     # Resume
     RESUME_PATH = os.getenv("RESUME_PATH", "resume.pdf")

@@ -1,16 +1,19 @@
 import os
+import sys
 import time
 import json
+import glob
 import logging
+import platform
+import subprocess
 from datetime import datetime
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 
 from config import Config
 
@@ -29,7 +32,11 @@ class LinkedInAutoApply:
                 from ai_customizer import AICustomizer
                 self.ai = AICustomizer()
                 self.resume_text = self._read_resume_text()
-                self.logger.info("AI customization enabled")
+                if not self.resume_text:
+                    self.logger.warning("Resume text is empty — AI features will be skipped. Install PyPDF2 for PDF support.")
+                    self.use_ai = False
+                else:
+                    self.logger.info(f"AI customization enabled (resume: {len(self.resume_text)} chars)")
             except Exception as e:
                 self.logger.warning(f"AI customization unavailable: {e}. Continuing without AI.")
                 self.use_ai = False
@@ -54,30 +61,135 @@ class LinkedInAutoApply:
         logger = logging.getLogger("LinkedInAutoApply")
         logger.setLevel(logging.INFO)
 
-        # File handler
-        fh = logging.FileHandler("linkedin_auto_apply.log")
-        fh.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
-        logger.addHandler(fh)
+        # Prevent duplicate handlers on repeated instantiation
+        if not logger.handlers:
+            fh = logging.FileHandler("linkedin_auto_apply.log")
+            fh.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+            logger.addHandler(fh)
 
-        # Console handler
-        ch = logging.StreamHandler()
-        ch.setFormatter(logging.Formatter("%(asctime)s - %(message)s"))
-        logger.addHandler(ch)
+            ch = logging.StreamHandler()
+            ch.setFormatter(logging.Formatter("%(asctime)s - %(message)s"))
+            logger.addHandler(ch)
 
         return logger
 
+    @staticmethod
+    def _find_chrome_binary():
+        """Auto-detect Chrome binary path across platforms."""
+        if platform.system() == "Darwin":
+            candidates = [
+                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                os.path.expanduser("~/Desktop/Google Chrome.app/Contents/MacOS/Google Chrome"),
+                os.path.expanduser("~/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+            ]
+            # Also check mdfind for non-standard locations
+            try:
+                result = subprocess.run(
+                    ["mdfind", "kMDItemCFBundleIdentifier == 'com.google.Chrome'"],
+                    capture_output=True, text=True, timeout=5
+                )
+                for app_path in result.stdout.strip().splitlines():
+                    candidates.append(os.path.join(app_path, "Contents/MacOS/Google Chrome"))
+            except Exception:
+                pass
+        elif platform.system() == "Windows":
+            candidates = [
+                os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe"),
+                os.path.expandvars(r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"),
+                os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe"),
+            ]
+        else:  # Linux
+            candidates = ["/usr/bin/google-chrome", "/usr/bin/chromium-browser", "/usr/bin/chromium"]
+
+        for path in candidates:
+            if os.path.exists(path):
+                return path
+        return None
+
+    @staticmethod
+    def _find_matching_chromedriver(chrome_version):
+        """Download chromedriver matching the installed Chrome version."""
+        major = chrome_version.split(".")[0]
+        arch = "arm64" if platform.machine() == "arm64" else "x64"
+
+        if platform.system() == "Darwin":
+            plat = f"mac-{arch}"
+        elif platform.system() == "Windows":
+            plat = "win64"
+        else:
+            plat = "linux64"
+
+        chromedriver_dir = os.path.join(os.path.expanduser("~"), ".chromedriver_cache")
+        cached = os.path.join(chromedriver_dir, f"chromedriver-{chrome_version}")
+        if os.path.exists(cached):
+            return cached
+
+        # Download from Chrome for Testing
+        import urllib.request
+        import zipfile
+        url = f"https://storage.googleapis.com/chrome-for-testing-public/{chrome_version}/{plat}/chromedriver-{plat}.zip"
+        os.makedirs(chromedriver_dir, exist_ok=True)
+        zip_path = os.path.join(chromedriver_dir, "chromedriver.zip")
+        urllib.request.urlretrieve(url, zip_path)
+        with zipfile.ZipFile(zip_path, "r") as z:
+            z.extractall(chromedriver_dir)
+        os.remove(zip_path)
+
+        extracted = os.path.join(chromedriver_dir, f"chromedriver-{plat}", "chromedriver")
+        if platform.system() == "Windows":
+            extracted += ".exe"
+        if os.path.exists(extracted):
+            os.rename(extracted, cached)
+            os.chmod(cached, 0o755)
+            return cached
+
+        raise FileNotFoundError(f"Could not find chromedriver after extraction for Chrome {chrome_version}")
+
+    def _get_chrome_version(self, chrome_path):
+        """Get the version string of the installed Chrome binary."""
+        try:
+            result = subprocess.run([chrome_path, "--version"], capture_output=True, text=True, timeout=5)
+            # "Google Chrome 148.0.7778.56" -> "148.0.7778.56"
+            return result.stdout.strip().split()[-1]
+        except Exception as e:
+            self.logger.warning(f"Could not determine Chrome version: {e}")
+            return None
+
     def _setup_driver(self):
+        chrome_path = self._find_chrome_binary()
+        if not chrome_path:
+            raise FileNotFoundError(
+                "Chrome not found. Install Google Chrome or set CHROME_BINARY_PATH in .env"
+            )
+        self.logger.info(f"Using Chrome: {chrome_path}")
+
         options = webdriver.ChromeOptions()
+        options.binary_location = chrome_path
         options.add_argument("--disable-notifications")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--start-maximized")
         options.add_argument("--disable-blink-features=AutomationControlled")
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        return webdriver.Chrome(
-            service=Service(ChromeDriverManager().install()),
-            options=options,
-        )
+        options.add_experimental_option("useAutomationExtension", False)
+
+        # Get matching chromedriver
+        chrome_version = self._get_chrome_version(chrome_path)
+        if chrome_version:
+            self.logger.info(f"Chrome version: {chrome_version}")
+            chromedriver_path = self._find_matching_chromedriver(chrome_version)
+            service = Service(chromedriver_path)
+        else:
+            # Fallback to webdriver_manager
+            from webdriver_manager.chrome import ChromeDriverManager
+            service = Service(ChromeDriverManager().install())
+
+        driver = webdriver.Chrome(service=service, options=options)
+        # Additional anti-detection
+        driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+            "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+        })
+        return driver
 
     def _wait_and_find(self, by, value, timeout=10):
         """Wait for element and return it."""
@@ -114,8 +226,14 @@ class LinkedInAutoApply:
 
         # Check for security verification
         if "checkpoint" in self.driver.current_url:
-            self.logger.warning("LinkedIn security check detected. Please complete it manually.")
-            input("Press Enter after completing the security check...")
+            self.logger.warning("LinkedIn security check detected. Please complete it manually in the browser.")
+            # Wait up to 120 seconds for user to complete the check
+            for _ in range(60):
+                time.sleep(2)
+                if "checkpoint" not in self.driver.current_url:
+                    break
+            else:
+                self.logger.warning("Security check timeout — continuing anyway.")
 
         self.logger.info("Login successful")
 
@@ -225,8 +343,11 @@ class LinkedInAutoApply:
                     btn.click()
                     time.sleep(2)
                     return True
+                else:
+                    self.logger.debug(f"  Button found but text is '{btn.text}', not Easy Apply")
             except (TimeoutException, Exception):
                 continue
+        self.logger.info("  No Easy Apply button found after trying all selectors")
         return False
 
     def _upload_resume(self):
@@ -241,54 +362,140 @@ class LinkedInAutoApply:
         except (TimeoutException, Exception):
             pass  # Resume may already be on file
 
+    def _has_unfillable_required_fields(self):
+        """Check if the current form step has required fields we can't auto-fill."""
+        try:
+            # Look for required text inputs that are empty
+            required_inputs = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                "input[required]:not([type='file']):not([type='hidden']):not([type='checkbox']):not([type='radio'])"
+            )
+            for inp in required_inputs:
+                if not inp.get_attribute("value"):
+                    label = ""
+                    try:
+                        input_id = inp.get_attribute("id")
+                        if input_id:
+                            label_el = self.driver.find_element(By.CSS_SELECTOR, f"label[for='{input_id}']")
+                            label = label_el.text
+                    except Exception:
+                        pass
+                    self.logger.info(f"  Required field empty: {label or inp.get_attribute('name') or 'unknown'}")
+                    return True
+
+            # Look for required select/dropdown that are unset
+            required_selects = self.driver.find_elements(By.CSS_SELECTOR, "select[required]")
+            for sel in required_selects:
+                if not sel.get_attribute("value"):
+                    self.logger.info(f"  Required dropdown not selected")
+                    return True
+
+            # Check for validation error messages visible on the page
+            error_msgs = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                "div[data-test-form-element-error-message], "
+                "span.artdeco-inline-feedback__message"
+            )
+            for msg in error_msgs:
+                if msg.is_displayed():
+                    self.logger.info(f"  Form validation error: {msg.text}")
+                    return True
+
+        except Exception:
+            pass
+        return False
+
     def _navigate_application_steps(self):
         """Navigate through multi-step application form. Returns True if submitted."""
         max_steps = 10
-        for _ in range(max_steps):
+        for step in range(max_steps):
             time.sleep(2)
+
+            # Try to upload resume on any step that has a file input
+            self._upload_resume()
+
             # Check for submit button
-            try:
-                submit_btn = self.driver.find_element(
-                    By.CSS_SELECTOR,
-                    "button[aria-label='Submit application'], "
-                    "button[aria-label='Review your application'], "
-                    "button[data-easy-apply-next-button][aria-label='Submit application']"
-                )
-                if "Submit" in submit_btn.text or "Review" in submit_btn.text:
-                    submit_btn.click()
-                    time.sleep(2)
-                    # If it was "Review", look for the final submit
-                    try:
-                        final_submit = WebDriverWait(self.driver, 3).until(
-                            EC.element_to_be_clickable((
-                                By.CSS_SELECTOR,
-                                "button[aria-label='Submit application']"
-                            ))
-                        )
-                        final_submit.click()
+            submit_selectors = [
+                "button[aria-label='Submit application']",
+                "button[aria-label='Review your application']",
+                "button[data-easy-apply-next-button][aria-label='Submit application']",
+            ]
+            submitted = False
+            for sel in submit_selectors:
+                try:
+                    submit_btn = self.driver.find_element(By.CSS_SELECTOR, sel)
+                    if submit_btn.is_displayed():
+                        self.logger.info(f"  Step {step + 1}: Found '{submit_btn.text}' button")
+                        submit_btn.click()
                         time.sleep(2)
-                    except (TimeoutException, Exception):
-                        pass
-                    return True
-            except NoSuchElementException:
-                pass
+                        # If it was "Review", look for the final submit
+                        if "Review" in submit_btn.text:
+                            try:
+                                final_submit = WebDriverWait(self.driver, 5).until(
+                                    EC.element_to_be_clickable((
+                                        By.CSS_SELECTOR,
+                                        "button[aria-label='Submit application']"
+                                    ))
+                                )
+                                final_submit.click()
+                                time.sleep(2)
+                            except (TimeoutException, Exception):
+                                pass
+                        submitted = True
+                        break
+                except NoSuchElementException:
+                    continue
+
+            if submitted:
+                # Verify submission succeeded (look for confirmation)
+                time.sleep(2)
+                try:
+                    self.driver.find_element(
+                        By.CSS_SELECTOR,
+                        "div[data-test-modal-close-btn], "
+                        "h2.artdeco-modal__header"
+                    )
+                except NoSuchElementException:
+                    pass
+                return True
+
+            # Check for required fields we can't fill before clicking next
+            if self._has_unfillable_required_fields():
+                self.logger.info(f"  Aborting: unfillable required fields at step {step + 1}")
+                return False
 
             # Check for next button
-            try:
-                next_btn = self.driver.find_element(
-                    By.CSS_SELECTOR,
-                    "button[aria-label='Continue to next step'], "
-                    "button[data-easy-apply-next-button]"
-                )
-                next_btn.click()
-                time.sleep(2)
-            except NoSuchElementException:
+            next_selectors = [
+                "button[aria-label='Continue to next step']",
+                "button[data-easy-apply-next-button]",
+            ]
+            clicked_next = False
+            for sel in next_selectors:
+                try:
+                    next_btn = self.driver.find_element(By.CSS_SELECTOR, sel)
+                    if next_btn.is_displayed():
+                        next_btn.click()
+                        time.sleep(2)
+
+                        # After clicking next, check if page changed or if errors appeared
+                        if self._has_unfillable_required_fields():
+                            self.logger.info(f"  Aborting: validation errors after clicking next at step {step + 1}")
+                            return False
+
+                        clicked_next = True
+                        break
+                except NoSuchElementException:
+                    continue
+
+            if not clicked_next:
+                self.logger.info(f"  No next/submit button found at step {step + 1}")
                 break
 
         return False
 
     def _dismiss_modal(self):
         """Close any post-application or error modals."""
+        time.sleep(1)  # Wait for modal to appear
         dismiss_selectors = [
             "button[aria-label='Dismiss']",
             "button[aria-label='Discard']",
@@ -296,11 +503,26 @@ class LinkedInAutoApply:
         ]
         for sel in dismiss_selectors:
             try:
-                btn = self.driver.find_element(By.CSS_SELECTOR, sel)
+                btn = WebDriverWait(self.driver, 3).until(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, sel))
+                )
                 btn.click()
                 time.sleep(1)
+                # Handle "Discard" confirmation dialog
+                try:
+                    confirm = WebDriverWait(self.driver, 2).until(
+                        EC.element_to_be_clickable((
+                            By.CSS_SELECTOR,
+                            "button[data-control-name='discard_application_confirm_btn'], "
+                            "button[data-test-dialog-primary-btn]"
+                        ))
+                    )
+                    confirm.click()
+                    time.sleep(1)
+                except (TimeoutException, Exception):
+                    pass
                 return
-            except (NoSuchElementException, Exception):
+            except (TimeoutException, NoSuchElementException, Exception):
                 continue
 
     def apply_to_jobs(self):
@@ -315,35 +537,43 @@ class LinkedInAutoApply:
 
         self.logger.info(f"Found {len(job_cards)} job listings")
 
-        for card in job_cards:
+        for idx, card in enumerate(job_cards):
             if jobs_applied >= Config.MAX_APPLICATIONS:
                 break
 
             try:
-                card.click()
+                try:
+                    card.click()
+                except StaleElementReferenceException:
+                    self.logger.warning(f"  Stale element at card {idx}, re-fetching cards")
+                    refreshed = self._get_job_cards()
+                    if idx < len(refreshed):
+                        refreshed[idx].click()
+                    else:
+                        continue
                 time.sleep(3)
 
                 title, company, location = self._get_job_details()
                 self.logger.info(f"Reviewing: {title} at {company}")
 
+                # Get job description once (used for AI analysis and cover letter)
+                job_desc = self._get_job_description()
+
                 # AI job fit analysis (optional)
-                if self.use_ai and self.ai and self.resume_text:
-                    job_desc = self._get_job_description()
-                    if job_desc:
-                        try:
-                            fit = self.ai.analyze_job_fit(self.resume_text, job_desc)
-                            score = fit.get("score", 5)
-                            rec = fit.get("recommendation", "apply")
-                            self.logger.info(f"  AI fit score: {score}/10 — {rec}")
-                            if rec == "skip":
-                                self.logger.info(f"  Skipping (low fit). Missing: {fit.get('missing_skills', [])}")
-                                continue
-                        except Exception as e:
-                            self.logger.warning(f"  AI analysis failed: {e}")
+                if self.use_ai and self.ai and self.resume_text and job_desc:
+                    try:
+                        fit = self.ai.analyze_job_fit(self.resume_text, job_desc)
+                        score = fit.get("score", 5)
+                        rec = fit.get("recommendation", "apply")
+                        self.logger.info(f"  AI fit score: {score}/10 — {rec}")
+                        if rec == "skip":
+                            self.logger.info(f"  Skipping (low fit). Missing: {fit.get('missing_skills', [])}")
+                            continue
+                    except Exception as e:
+                        self.logger.warning(f"  AI analysis failed: {e}")
 
                 # Click Easy Apply
                 if not self._click_easy_apply():
-                    self.logger.info(f"  No Easy Apply button found, skipping")
                     continue
 
                 # Upload resume
@@ -359,20 +589,18 @@ class LinkedInAutoApply:
                         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     }
                     successful.append(app_info)
-                    self.logger.info(f"  ✅ Applied #{jobs_applied}: {title} at {company}")
+                    self.logger.info(f"  Applied #{jobs_applied}: {title} at {company}")
 
-                    # Generate cover letter for records (optional)
-                    if self.use_ai and self.ai and self.resume_text:
-                        job_desc = self._get_job_description()
-                        if job_desc:
-                            try:
-                                cover_letter = self.ai.generate_cover_letter(
-                                    self.resume_text, job_desc, company, title
-                                )
-                                app_info["cover_letter"] = cover_letter
-                                self.logger.info("  Cover letter generated and saved")
-                            except Exception as e:
-                                self.logger.warning(f"  Cover letter generation failed: {e}")
+                    # Generate cover letter for records
+                    if self.use_ai and self.ai and self.resume_text and job_desc:
+                        try:
+                            cover_letter = self.ai.generate_cover_letter(
+                                self.resume_text, job_desc, company, title
+                            )
+                            app_info["cover_letter"] = cover_letter
+                            self.logger.info("  Cover letter generated and saved to results")
+                        except Exception as e:
+                            self.logger.warning(f"  Cover letter generation failed: {e}")
                 else:
                     self.logger.info(f"  Could not complete application for {title}")
                     self._dismiss_modal()
@@ -422,6 +650,7 @@ def main():
     all_applications = []
     total_applied = 0
     page = 0
+    empty_pages = 0
 
     try:
         bot.login()
@@ -435,7 +664,13 @@ def main():
             total_applied += applied
 
             if applied == 0:
-                bot.logger.info("No more applications on this page, moving on...")
+                empty_pages += 1
+                bot.logger.info(f"No applications on this page ({empty_pages} consecutive empty pages)")
+                if empty_pages >= 3:
+                    bot.logger.info("3 consecutive empty pages — stopping search.")
+                    break
+            else:
+                empty_pages = 0
 
             page += 1
             time.sleep(3)
